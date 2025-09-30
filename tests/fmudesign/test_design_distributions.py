@@ -97,11 +97,11 @@ def test_sample_discrete():
 
     # Test weights that don't sum to 1
     weighted_values = dists.sample_discrete(
-        [",".join(outcomes), "2,6"], rng.uniform(size=100)
+        [",".join(outcomes), "2,6"], rng.uniform(size=1000)
     )
     # Should see roughly 25% foo and 75% bar.com
-    foo_count = np.sum(weighted_values == "foo")
-    assert 15 <= foo_count <= 35  # Allow some variance due to randomness
+    foo_count = np.mean(weighted_values == "foo")
+    assert 0.20 <= foo_count <= 0.30  # Allow some variance due to randomness
 
 
 def test_draw_values():
