@@ -79,8 +79,9 @@ def test_draw_values_pert(seed):
     assert np.isclose(values.mean(), 5, atol=0.55)
 
 
-def test_sample_discrete():
-    rng = np.random.default_rng()
+@pytest.mark.parametrize("seed", range(100))
+def test_sample_discrete(seed):
+    rng = np.random.default_rng(seed)
 
     outcomes = ["foo", "bar.com"]
     # Test basic functionality
@@ -104,9 +105,10 @@ def test_sample_discrete():
     assert 0.20 <= foo_count <= 0.30  # Allow some variance due to randomness
 
 
-def test_draw_values():
+@pytest.mark.parametrize("seed", range(100))
+def test_draw_values(seed):
     """Test the wrapper function for drawing values"""
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     quantiles = rng.uniform(size=10)
 
