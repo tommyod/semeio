@@ -129,7 +129,7 @@ a specific pressure point is valid
         "--log-level",
         "-l",
         required=False,
-        default="WARNING",
+        default="INFO",
         type=logging.getLevelName,
         help="Sets the log level",
     )
@@ -137,10 +137,11 @@ a specific pressure point is valid
     return parser
 
 
-def main_entry_point() -> None:
+def main_entry_point(argv: list[str] | None = None) -> None:
     arg_parser = _build_parser()
-    options = arg_parser.parse_args()
+    options = arg_parser.parse_args(argv)
     logger.setLevel(options.log_level)
+    logging.getLogger("semeio.forward_models.rft").setLevel(options.log_level)
 
     context_errors = []
     trajectories: MutableMapping[str, Trajectory] = {}

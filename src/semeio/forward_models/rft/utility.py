@@ -23,8 +23,7 @@ def existing_directory(path: str) -> str:
 def load_and_parse_well_time_file(
     filename: str,
 ) -> list[tuple[str, datetime.date, int]]:
-    """
-    Reads and parses a file from disk, supporting 2 formats:
+    """Reads and parses a file from disk, supporting 2 formats:
 
       <wellname : str> <date : isostring> <report_step : int>
 
@@ -113,20 +112,11 @@ def load_and_parse_well_time_file(
 
 
 def valid_eclbase(file_path: str) -> tuple[Grid, ResdataRFTFile]:
-    """
+    """Checks whether file_path is a eclbase with an .EGRID and .RFT file.
+
     The filename is assumed to be without extension and two files
     must be present, <filename>.RFT and <filename>.EGRID.
     Loads both files with respective loaders and returns them
-
-    Parameters
-    ----------
-    filename : string
-        Filename to open
-
-    Returns
-    -------
-    Tuple
-        Returns a tuple with an ecl grid instance and an rft instance
     """
     rft_filepath = file_path + ".RFT"
     if not os.path.isfile(rft_filepath):

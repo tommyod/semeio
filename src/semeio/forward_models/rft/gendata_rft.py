@@ -2,7 +2,9 @@ import datetime
 import logging
 import os
 from collections.abc import Mapping, Sequence
+from time import perf_counter
 
+import numpy as np
 import pandas as pd
 from resdata.grid import Grid
 from resdata.rft import ResdataRFTFile
@@ -14,18 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 def _write_gen_data_files(
-    trajectory_df: pd.DataFrame, directory: str, well: str, report_step: int
+    trajectory_df: pd.DataFrame, output_directory: str, well_name: str, report_step: int
 ) -> None:
     """Generate three files with the information GEN_DATA needs
     from the trajectory dataframe.
 
     See https://github.com/equinor/ert/blob/0dc96c49ca8eafee54a06227530b5a47b094e2bc/docs/tips.txt#L87
 
-    One main file (fname) will be always be produced with pressure values, and
-    two auxiliary files will be produced with the suffixes "_active" and
-    "_inactive_info". The _active file tells ERT if some of the values in the
-    base file should be ignored, and _inactive_info will give an explanation
-    for why it should be ignored.
+    One main file (RFT_{well_name}_{report_step}) will always be produced with
+    pressure values, and two auxiliary files will be produced with the suffixes
+    "_active" and "_inactive_info". The _active file tells ERT if some of the
+    values in the base file should be ignored, and _inactive_info will give an
+    explanation for why it should be ignored.
 
     The pressure file will always be written. If there is no pressure
     data, a file with -1 values will be written for each point pr. line.
@@ -35,16 +37,14 @@ def _write_gen_data_files(
     string SWAT injected in the emitted filename.
 
     Args:
-        trajectory_df (pd.DataFrame): The column "order" should contain
+        trajectory_df: The column "order" should contain
             the original row order from input text files. "pressure" should
             hold pressure data, but will be defaulted if not present. "is_active"
             should be a boolean column, and "inactive_info" should contain
             strings with information on why points are inactive.
-        datanames (list): Which datanames to dump. Must be among pressure, swat,
-            sgas and soil.
-        directory (str): Directory name, for where to dump files.
-        well (str): Name of well, to be used to construct filenames.
-        report_step (int): The RFT report step, used to construct filenames
+        output_directory: Directory name, for where to dump files.
+        well: Name of well, to be used to construct filenames.
+        report_step: The RFT report step, used to construct filenames
     """
     data2fname = {"pressure": "", "swat": "SWAT_", "sgas": "SGAS_", "soil": "SOIL_"}
     for dataname in {"pressure"}.union(
@@ -52,27 +52,30 @@ def _write_gen_data_files(
     ):
         _write_simdata(
             os.path.join(
-                directory,
-                f"RFT_{data2fname[dataname]}{well}_{report_step}",
+                output_directory,
+                f"RFT_{data2fname[dataname]}{well_name}_{report_step}",
             ),
             dataname,
             trajectory_df,
         )
     _write_active(
-        os.path.join(directory, f"RFT_{well}_{report_step}") + "_active",
+        os.path.join(output_directory, f"RFT_{well_name}_{report_step}") + "_active",
         trajectory_df,
     )
     _write_inactive_info(
-        os.path.join(directory, f"RFT_{well}_{report_step}") + "_inactive_info",
+        os.path.join(output_directory, f"RFT_{well_name}_{report_step}")
+        + "_inactive_info",
         trajectory_df,
     )
 
 
-def _write_simdata(fname: str, dataname: str, trajectory_df: pd.DataFrame) -> None:
-    """Write pressure value, one pr line for all points, -1 is used where
+def _write_simdata(
+    output_file: str, dataname: str, trajectory_df: pd.DataFrame
+) -> None:
+    """Write pressure value, one per line for all points, -1 is used where
     there is no pressure information.
     """
-    with open(fname + "", "w+", encoding="utf-8") as file_handle:
+    with open(output_file, "w+", encoding="utf-8") as file_handle:
         if dataname in trajectory_df:
             file_handle.write(
                 "\n".join(
@@ -86,12 +89,12 @@ def _write_simdata(fname: str, dataname: str, trajectory_df: pd.DataFrame) -> No
         else:
             file_handle.write("\n".join(["-1"] * len(trajectory_df)) + "\n")
 
-    logger.info(f"Forward model script gendata_rft.py: Wrote file {fname}")
+    logger.info(f"Forward model script gendata_rft.py: Wrote file {output_file}")
 
 
-def _write_active(fname: str, trajectory_df: pd.DataFrame) -> None:
+def _write_active(output_file: str, trajectory_df: pd.DataFrame) -> None:
     """Write a file with "1" pr row if a point is active, "0" if not"""
-    with open(fname, "w+", encoding="utf-8") as file_handle:
+    with open(output_file, "w+", encoding="utf-8") as file_handle:
         file_handle.write(
             "\n".join(
                 trajectory_df.sort_values("order")["is_active"]
@@ -102,9 +105,9 @@ def _write_active(fname: str, trajectory_df: pd.DataFrame) -> None:
         )
 
 
-def _write_inactive_info(fname: str, trajectory_df: pd.DataFrame) -> None:
+def _write_inactive_info(output_file: str, trajectory_df: pd.DataFrame) -> None:
     """Write a file with explanations to users for inactive points"""
-    with open(fname, "w+", encoding="utf-8") as file_handle:
+    with open(output_file, "w+", encoding="utf-8") as file_handle:
         if "inactive_info" not in trajectory_df:
             file_handle.write("")
         else:
@@ -132,14 +135,15 @@ def _populate_trajectory_points(
     and simulated pressure at the given date in the cells.
 
     Args:
-        well (str): Eclipse-name of well
-        date (datetime.date): Date for which the RFT observation should be taken,
+        well: Eclipse-name of well
+        date: Date for which the RFT observation should be taken,
             must correspond to a date in the Eclipse RFT binary output
-        trajectory_points (list of points): Representing the wellpath in UTM at which
+        trajectory_points: Representing the wellpath in UTM at which
             the real life RFT observations points are valid.
-        ecl_grid (libecl Grid object):
-        ecl_rft (libecl RFT object):
-        zonemap (dict):
+        ecl_grid: The grid where the (i,j,k) are looked up
+        ecl_rft: THe rft file where pressure for the point is found
+        zonemap: The mapping of k indices to zones, used to validate
+            that the found ijk-coordinates is in the correct zone.
 
     Returns:
         The list of trajectory points, augmented with i,j,k, simulated pressure
@@ -155,7 +159,9 @@ def _populate_trajectory_points(
         return None
 
     ijk_guess = None
-    for point in trajectory_points:  # type: ignore[attr-defined]
+
+    start_time = perf_counter()
+    for point in iter(trajectory_points):
         ijk = ecl_grid.find_cell(
             point.utm_x, point.utm_y, point.true_vertical_depth, start_ijk=ijk_guess
         )
@@ -163,6 +169,37 @@ def _populate_trajectory_points(
         ijk_guess = ijk
         point.update_simdata_from_rft(rft)
         point.validate_zone(zonemap)
+
+    logger.info(f"Finding points took {perf_counter() - start_time}s")
+
+    try:
+        from resfo_utilities import CornerpointGrid  # noqa: PLC0415
+
+        grid = CornerpointGrid.read_egrid(ecl_grid.get_name())
+        start_time = perf_counter()
+        new_points = grid.find_cell_containing_point(
+            np.array(
+                [
+                    (point.utm_x, point.utm_y, point.true_vertical_depth)
+                    for point in iter(trajectory_points)
+                ],
+                dtype=np.float32,
+            )
+        )
+        logger.info(
+            f"Finding points with new method took {perf_counter() - start_time}s"
+        )
+
+        for point, new_point in zip(iter(trajectory_points), new_points, strict=True):
+            if point.grid_ijk != new_point:
+                logger.warning(
+                    "New and old cell finding method"
+                    " did not agree on grid coordinates: "
+                    f"{point.grid_ijk} vs {new_point}"
+                )
+
+    except Exception as err:
+        logger.error(f"Got error {err} while reading egrid with resfo")
 
     return trajectory_points
 
