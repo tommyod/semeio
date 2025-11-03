@@ -34,6 +34,14 @@ from semeio.fmudesign import DesignMatrix, excel_to_dict
 EXAMPLE_FILES = {
     "fmudesign_ex_montecarlo.xlsx": "Shows all statistical parameter distributions, how to correlate samples, etc.",
     "design_input_template.xlsx": "The example file used in fmu-coursedocs",
+    "ex1_onebyone_rms_repeat.xlsx": "Example file from the documentation",
+    "ex2_correlations.xlsx": "Example file from the documentation",
+    "ex3_velocities.xlsx": "Example file from the documentation",
+    "ex4_background_parameters.xlsx": "Example file from the documentation",
+    "ex5_single_reference.xlsx": "Example file from the documentation",
+    "ex6_singlereference_and_seed.xlsx": "Example file from the documentation",
+    "ex7_background_no_seed.xlsx": "Example file from the documentation",
+    "ex8_mc_with_correls.xlsx": "Example file from the documentation",
 }
 
 
